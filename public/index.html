@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Visionary Infra Expense Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.25.7/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.7.7/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons@4.29.2/dist/feather.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jwt-decode@3.1.2/build/jwt-decode.min.js"></script>
+  <style>
+    body { padding: 2rem 1rem; }
+    .toast { 
+      position: fixed; top: 1rem; right: 1rem; padding: 0.75rem 1.5rem; 
+      border-radius: 0.5rem; color: white; z-index: 1000; font-size: 0.875rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+      opacity: 0; animation: fadeInOut 3s ease-in-out;
+    }
+    @keyframes fadeInOut {
+      0% { opacity: 0; transform: translateY(-10px); }
+      10% { opacity: 1; transform: translateY(0); }
+      90% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-10px); }
+    }
+    .toast-success { background-color: #10b981; }
+    .toast-error { background-color: #ef4444; }
+    .dark { background-color: #1e293b; color: #f1f5f9; }
+    .dark .bg-white { background-color: #2d3748; }
+    .dark .bg-gray-50 { background-color: #475569; }
+    .dark .bg-gray-100 { background-color: #1f2937; }
+    .dark .text-gray-700 { color: #e5e7eb; }
+    .dark .text-gray-800 { color: #f3f4f6; }
+    .dark .border-gray-300 { border-color: #4b5563; }
+    .dark .bg-blue-500 { background-color: #2563eb; }
+    .dark .bg-green-500 { background-color: #16a34a; }
+    .dark .bg-gray-500 { background-color: #6b7280; }
+    .dark input, .dark select { background-color: #374151; color: #f3f4f6; border-color: #4b5563; }
+    .dark input:focus, .dark select:focus { border-color: #60a5fa; ring: 2px; ring-color: #60a5fa; }
+    .error-boundary { padding: 1.5rem; background-color: #fef2f2; color: #dc2626; border-radius: 0.5rem; }
+    .spinner { border: 2px solid #f3f4f6; border-top: 2px solid #3b82f6; border-radius: 50%; width: 1.5rem; height: 1.5rem; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    input, select, button { transition: all 0.2s ease; }
+    button:hover { transform: translateY(-1px); }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen transition-colors duration-200">
+  <div id="root"></div>
+  <script type="text/babel">
+    class ErrorBoundary extends React.Component {
+      state = { hasError: false, error: null };
+      static getDerivedStateFromError(error) {
+        console.error('ErrorBoundary caught:', error, error.stack);
+        return { hasError: true, error };
+      }
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="error-boundary">
+              <h2>Something went wrong.</h2>
+              <p>{this.state.error?.message || 'Please refresh or try again later.'}</p>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    function Login() {
+      const [email, setEmail] = React.useState('');
+      const [password, setPassword] = React.useState('');
+      const [code, setCode] = React.useState('');
+      const [isRegistering, setIsRegistering] = React.useState(false);
+      const [isVerifying, setIsVerifying] = React.useState(false);
+      const [isResettingPassword, setIsResettingPassword] = React.useState(false);
+      const [toast, setToast] = React.useState({ message: '', type: '' });
+      const [isLoading, setIsLoading] = React.useState(false);
+      const [isDarkMode, setIsDarkMode] = React.useState(() => localStorage.getItem('darkMode') === 'true');
+
+      React.useEffect(() => {
+        const replaceIcons = () => {
+          try {
+            feather.replace();
+          } catch (e) {
+            console.error('Feather replace failed:', e);
+          }
+        };
+        replaceIcons();
+        const observer = new MutationObserver(replaceIcons);
+        observer.observe(document.getElementById('root'), { childList: true, subtree: true });
+        return () => observer.disconnect();
+      }, []);
+
+      React.useEffect(() => {
+        document.body.classList.toggle('dark', isDarkMode);
+        localStorage.setItem('darkMode', isDarkMode);
+      }, [isDarkMode]);
+
+      const showToast = (message, type) => {
+        setToast({ message, type });
+        setTimeout(() => setToast({ message: '', type: '' }), 3000);
+      };
+
+      const validateEmail = (email) => {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      };
+
+      const handleRegister = async (e) => {
+        e.preventDefault();
+        if (!validateEmail(email)) {
+          showToast('Please enter a valid email.', 'error');
+          return;
+        }
+        if (!password) {
+          showToast('Password required.', 'error');
+          return;
+        }
+        setIsLoading(true);
+        try {
+          await axios.post('http://localhost:3000/register', { email, password });
+          showToast('Verification code sent to your email.', 'success');
+          setIsVerifying(true);
+        } catch (e) {
+          console.error('Register error:', e);
+          showToast(e.response?.data?.error || 'Failed to register.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const handleVerifyCode = async (e) => {
+        e.preventDefault();
+        if (!code) {
+          showToast('Verification code required.', 'error');
+          return;
+        }
+        setIsLoading(true);
+        try {
+          const response = await axios.post('http://localhost:3000/verify', { email, code });
+          localStorage.setItem('token', response.data.token);
+          showToast('Registration successful! Redirecting to dashboard.', 'success');
+          setIsVerifying(false);
+          setIsRegistering(false);
+          setCode('');
+          setPassword('');
+          setEmail('');
+          setTimeout(() => {
+            window.location.href = '/dashboard.html';
+          }, 1000);
+        } catch (e) {
+          console.error('Verify code error:', e);
+          showToast(e.response?.data?.error || 'Failed to verify code.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        if (!validateEmail(email) || !password) {
+          showToast('Valid email and password required.', 'error');
+          return;
+        }
+        setIsLoading(true);
+        try {
+          const response = await axios.post('http://localhost:3000/login', { email, password });
+          localStorage.setItem('token', response.data.token);
+          showToast('Login successful! Redirecting to dashboard.', 'success');
+          setTimeout(() => {
+            window.location.href = '/dashboard.html';
+          }, 1000);
+        } catch (e) {
+          console.error('Login error:', e);
+          showToast(e.response?.data?.error || 'Failed to login.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const handleForgotPassword = async (e) => {
+        e.preventDefault();
+        if (!validateEmail(email)) {
+          showToast('Please enter a valid email.', 'error');
+          return;
+        }
+        setIsLoading(true);
+        try {
+          await axios.post('http://localhost:3000/forgot-password', { email });
+          showToast('New password sent to your email. Please check your inbox.', 'success');
+          setIsResettingPassword(false);
+          setEmail('');
+          setPassword('');
+        } catch (e) {
+          console.error('Forgot password error:', e);
+          showToast(e.response?.data?.error || 'Failed to process request.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const toggleDarkMode = () => {
+        setIsDarkMode(prev => !prev);
+      };
+
+      return (
+        <div className={`max-w-md mx-auto p-6 bg-white rounded-2xl shadow-xl mt-8 ${isDarkMode ? 'dark' : ''}`}>
+          {isLoading && (
+            <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
+              <div className="spinner"></div>
+            </div>
+          )}
+          {toast.message && (
+            <div className={`toast ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
+              {toast.message}
+            </div>
+          )}
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold text-gray-800">
+              {isResettingPassword ? 'Reset Password' : isRegistering ? 'Register' : 'Login'} - Visionary Infra
+            </h1>
+            <button onClick={toggleDarkMode} className="p-2 rounded-full hover:bg-gray-200" title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+              <i data-feather={isDarkMode ? 'sun' : 'moon'} className="w-6 h-6"></i>
+            </button>
+          </div>
+          <div className="p-6 bg-gray-50 rounded-lg">
+            {isVerifying ? (
+              <form onSubmit={handleVerifyCode}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Verification Code</label>
+                  <input
+                    type="text"
+                    value={code}
+                    onChange={e => setCode(e.target.value)}
+                    className="border rounded-lg p-3 w-full text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter 6-digit code"
+                    maxLength="6"
+                  />
+                </div>
+                <div className="flex flex-col gap-4">
+                  <button
+                    type="submit"
+                    className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 flex items-center justify-center"
+                    title="Verify Code"
+                    disabled={isLoading}
+                  >
+                    <i data-feather="check" className="w-5 h-5 mr-2"></i>Verify Code
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsVerifying(false);
+                      setCode('');
+                    }}
+                    className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 flex items-center justify-center"
+                    title="Cancel"
+                  >
+                    <i data-feather="x" className="w-5 h-5 mr-2"></i>Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={isResettingPassword ? handleForgotPassword : isRegistering ? handleRegister : handleLogin}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    className="border rounded-lg p-3 w-full text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter email"
+                  />
+                </div>
+                {!isResettingPassword && (
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      className="border rounded-lg p-3 w-full text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Enter password"
+                    />
+                  </div>
+                )}
+                {!isRegistering && !isResettingPassword && (
+                  <div className="mb-6">
+                    <button
+                      type="button"
+                      onClick={() => { setIsResettingPassword(true); setEmail(''); setPassword(''); }}
+                      className="text-blue-500 hover:text-blue-600 text-sm"
+                      title="Forgot Password"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                )}
+                <div className="flex flex-col gap-4">
+                  <button
+                    type="submit"
+                    className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 flex items-center justify-center"
+                    title={isRegistering ? 'Register' : isResettingPassword ? 'Reset Password' : 'Login'}
+                    disabled={isLoading}
+                  >
+                    <i data-feather={isRegistering ? 'user-plus' : isResettingPassword ? 'mail' : 'log-in'} className="w-5 h-5 mr-2"></i>
+                    {isRegistering ? 'Register' : isResettingPassword ? 'Reset Password' : 'Login'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRegistering(!isRegistering);
+                      setIsResettingPassword(false);
+                      setEmail('');
+                      setPassword('');
+                    }}
+                    className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 flex items-center justify-center"
+                    title={isRegistering ? 'Switch to Login' : 'Switch to Register'}
+                  >
+                    <i data-feather={isRegistering ? 'log-in' : 'user-plus'} className="w-5 h-5 mr-2"></i>
+                    {isRegistering ? 'Switch to Login' : 'Switch to Register'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<ErrorBoundary><Login /></ErrorBoundary>, document.getElementById('root'));
+  </script>
+</body>
+</html>

@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VIEW - Visionary Infra Expense Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.25.7/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.7.7/dist/axios.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons@4.29.2/dist/feather.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jwt-decode@3.1.2/build/jwt-decode.min.js"></script>
+  <style>
+    body { padding: 2rem 1rem; }
+    .toast { 
+      position: fixed; top: 1rem; right: 1rem; padding: 0.75rem 1.5rem; 
+      border-radius: 0.5rem; color: white; z-index: 1000; font-size: 0.875rem;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); 
+      opacity: 0; animation: fadeInOut 3s ease-in-out;
+    }
+    @keyframes fadeInOut {
+      0% { opacity: 0; transform: translateY(-10px); }
+      10% { opacity: 1; transform: translateY(0); }
+      90% { opacity: 1; transform: translateY(0); }
+      100% { opacity: 0; transform: translateY(-10px); }
+    }
+    .toast-success { background-color: #10b981; }
+    .toast-error { background-color: #ef4444; }
+    .dark { background-color: #1e293b; color: #f1f5f9; }
+    .dark .bg-white { background-color: #2d3748; }
+    .dark .bg-gray-50 { background-color: #64748b; }
+    .dark .bg-gray-100 { background-color: #2d3748; }
+    .dark .text-gray-700 { color: #f9fafb; }
+    .dark .text-gray-800 { color: #f3f4f6; }
+    .dark .border-gray-300 { border-color: #4b5563; }
+    .dark .bg-blue-500 { background-color: #2563eb; }
+    .dark .bg-green-500 { background-color: #16a34a; }
+    .dark .bg-gray-500 { background-color: #6b7280; }
+    .dark .bg-gray-200 { background-color: #6b7280; }
+    .dark .bg-gray-300 { background-color: #9ca3af; }
+    .dark input, .dark select { background-color: #374151; color: #f3f4f6; border-color: #4b5563; }
+    .dark input:focus, .dark select:focus { border-color: #60a5fa; ring: 2px; ring-color: #60a5fa; }
+    .error-boundary { padding: 1.5rem; background-color: #fef2f2; color: #dc2626; border-radius: 0.5rem; }
+    .spinner { border: 2px solid #f3f4f6; border-top: 2px solid #3b82f6; border-radius: 50%; width: 1.5rem; height: 1.5rem; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .collapsible-header { user-select: none; }
+    input, select { transition: all 0.2s ease; }
+    button { transition: background-color 0.2s ease, transform 0.1s ease; }
+    button:hover { transform: translateY(-1px); }
+    .user-icon-container { position: relative; }
+    .user-icon { width: 2.5rem; height: 2.5rem; border-radius: 50%; background-color: #e5e7eb; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+    .dark .user-icon { background-color: #4b5563; }
+    .dropdown-menu { position: absolute; top: 3rem; right: 0; background-color: white; border: 1px solid #e5e7eb; border-radius: 0.5rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); z-index: 1000; width: 150px; }
+    .dark .dropdown-menu { background-color: #2d3748; border-color: #4b5563; }
+    .dropdown-item { padding: 0.75rem 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
+    .dropdown-item:hover { background-color: #f3f4f6; }
+    .dark .dropdown-item:hover { background-color: #4b5563; }
+    .modal { position: fixed; inset: 0; background-color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal-content { background-color: white; padding: 2rem; border-radius: 0.5rem; width: 100%; max-width: 400px; position: relative; }
+    .dark .modal-content { background-color: #2d3748; }
+    .close-button { position: absolute; top: 1rem; right: 1rem; cursor: pointer; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen transition-colors duration-200">
+  <div id="root"></div>
+  <script type="text/babel">
+    class ErrorBoundary extends React.Component {
+      state = { hasError: false, error: null };
+      static getDerivedStateFromError(error) {
+        console.error('ErrorBoundary caught:', error, error.stack);
+        return { hasError: true, error };
+      }
+      render() {
+        if (this.state.hasError) {
+          return (
+            <div className="error-boundary">
+              <h2>Something went wrong.</h2>
+              <p>{this.state.error?.message || 'Please refresh or try again later.'}</p>
+            </div>
+          );
+        }
+        return this.props.children;
+      }
+    }
+
+    function ProtectedRoute({ children }) {
+      const [isAuthenticated, setIsAuthenticated] = React.useState(null);
+      const [email, setEmail] = React.useState('');
+
+      React.useEffect(() => {
+        const token = localStorage.getItem('token')?.trim();
+        console.log('Token received from localStorage - Dashboard page:', token);
+        if (!token) {
+          console.log('No token found, redirecting to index.html');
+          window.location.href = '/index.html';
+          return;
+        }
+        console.log('Making API call to /categories with token:', token);
+        axios.get('http://localhost:3000/categories', {
+          headers: { Authorization: `Bearer ${token}` }
+        }).then(res => {
+          console.log('Categories API call successful:', res.data);
+          setIsAuthenticated(true);
+          const decoded = window.jwt_decode(token);
+          setEmail(decoded.email);
+        }).catch(error => {
+          console.log('Inside catch - API call failed');
+          console.error('Error details:', {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            message: error.message,
+            config: error.config
+          });
+          if (error.response?.status === 401 || error.response?.status === 403) {
+            console.log('Invalid token, redirecting to index.html');
+            localStorage.removeItem('token');
+            window.location.href = '/index.html';
+          } else {
+            console.log('Non-auth error, staying on dashboard');
+            setIsAuthenticated(true);
+          }
+        });
+      }, []);
+
+      if (isAuthenticated === null) {
+        return (
+          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
+            <div className="spinner"></div>
+          </div>
+        );
+      }
+
+      return isAuthenticated ? (
+        <div>
+          {React.cloneElement(children, { email })}
+        </div>
+      ) : null;
+    }
+
+    function App({ email }) {
+      const [categories, setCategories] = React.useState([]);
+      const [newCategory, setNewCategory] = React.useState('');
+      const [expenses, setExpenses] = React.useState([]);
+      const [filteredExpenses, setFilteredExpenses] = React.useState([]);
+      const [date, setDate] = React.useState(new Date().toISOString().split('T')[0]);
+      const [amounts, setAmounts] = React.useState({});
+      const [fromDate, setFromDate] = React.useState('');
+      const [toDate, setToDate] = React.useState('');
+      const [filterCategory, setFilterCategory] = React.useState('');
+      const [filterFromDate, setFilterFromDate] = React.useState('');
+      const [filterToDate, setFilterToDate] = React.useState('');
+      const [stats, setStats] = React.useState({ total: 0, byCategory: {}, percentages: {} });
+      const [topCategories, setTopCategories] = React.useState([]);
+      const [highDays, setHighDays] = React.useState([]);
+      const [yearlyTrends, setYearlyTrends] = React.useState([]);
+      const [editingExpense, setEditingExpense] = React.useState(null);
+      const [collapsedSections, setCollapsedSections] = React.useState({
+        enterExpenses: true,
+        statistics: true,
+        pastExpenses: true
+      });
+      const [collapsedExpenses, setCollapsedExpenses] = React.useState({});
+      const [isTableView, setIsTableView] = React.useState(false);
+      const [toast, setToast] = React.useState({ message: '', type: '' });
+      const [isDarkMode, setIsDarkMode] = React.useState(() => localStorage.getItem('darkMode') === 'true');
+      const [isLoading, setIsLoading] = React.useState(false);
+      const [showDropdown, setShowDropdown] = React.useState(false);
+      const [showProfileModal, setShowProfileModal] = React.useState(false);
+      const [profile, setProfile] = React.useState({ name: '', gender: '', dob: '' });
+      const [newName, setNewName] = React.useState('');
+      const [currentPassword, setCurrentPassword] = React.useState('');
+      const [newPassword, setNewPassword] = React.useState('');
+
+      const enterExpensesRef = React.useRef(null);
+      const dropdownRef = React.useRef(null);
+
+      const defaultCategories = [
+        'Food', 'Salaries', 'Vehicle payment', 'Department expenses',
+        'Gravel', 'Cement', 'Metal', 'Labour', 'Diesel', 'Remarks', 'Project expenses'
+      ];
+
+      React.useEffect(() => {
+        const replaceIcons = () => {
+          try {
+            feather.replace();
+          } catch (e) {
+            console.error('Feather replace failed:', e);
+          }
+        };
+        replaceIcons();
+        const observer = new MutationObserver(replaceIcons);
+        observer.observe(document.getElementById('root'), { childList: true, subtree: true });
+        return () => observer.disconnect();
+      }, []);
+
+      React.useEffect(() => {
+        document.body.classList.toggle('dark', isDarkMode);
+        localStorage.setItem('darkMode', isDarkMode);
+      }, [isDarkMode]);
+
+      React.useEffect(() => {
+        const handleClickOutside = (event) => {
+          if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+            setShowDropdown(false);
+          }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+      }, []);
+
+      const showToast = (message, type) => {
+        setToast({ message, type });
+        setTimeout(() => setToast({ message: '', type: '' }), 3000);
+      };
+
+      const fetchProfile = async () => {
+        setIsLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          const { data } = await axios.get('http://localhost:3000/profile', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setProfile(data);
+          setNewName(data.name || '');
+        } catch (e) {
+          console.error('Fetch profile error:', e);
+          showToast('Failed to load profile.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const fetchCategories = async () => {
+        setIsLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          const { data } = await axios.get('http://localhost:3000/categories', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const fetched = (data || []).map(cat => cat.name).filter(Boolean);
+          const sorted = [
+            ...defaultCategories.filter(cat => fetched.includes(cat)),
+            ...fetched.filter(cat => !defaultCategories.includes(cat))
+          ];
+          setCategories(sorted);
+        } catch (e) {
+          console.error('Fetch categories error:', e);
+          showToast('Failed to load categories. Please try again.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const fetchExpenses = async () => {
+        setIsLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          const { data } = await axios.get('http://localhost:3000/expenses', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const exps = data || [];
+          console.log('Fetched expenses:', exps);
+          setExpenses(exps);
+          setFilteredExpenses(exps);
+          setCollapsedExpenses(exps.reduce((acc, exp) => ({
+            ...acc,
+            [exp.date]: true
+          }), {}));
+        } catch (e) {
+          console.error('Fetch expenses error:', e);
+          showToast('Failed to load expenses. Please try again.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const fetchStats = async () => {
+        setIsLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          const params = fromDate && toDate ? { fromDate, toDate } : {};
+          const [statsRes, topRes, highRes, yearlyRes] = await Promise.all([
+            axios.get('http://localhost:3000/stats', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { total: 0, byCategory: {}, percentages: {} } })),
+            axios.get('http://localhost:3000/stats/top', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })),
+            axios.get('http://localhost:3000/stats/high-days', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })),
+            axios.get('http://localhost:3000/yearly', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] }))
+          ]);
+          setStats(statsRes.data);
+          setTopCategories(topRes.data);
+          setHighDays(highRes.data);
+          setYearlyTrends(yearlyRes.data);
+        } catch (e) {
+          console.error('Fetch stats error:', e);
+          showToast('Failed to load statistics. Please try again.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      React.useEffect(() => {
+        fetchCategories();
+        fetchExpenses();
+        fetchStats();
+      }, [fromDate, toDate]);
+
+      React.useEffect(() => {
+        let filtered = [...expenses];
+        if (filterCategory) {
+          filtered = filtered.map(exp => ({
+            ...exp,
+            amounts: Object.fromEntries(
+              Object.entries(exp.amounts).filter(([cat]) => cat === filterCategory)
+            )
+          })).filter(exp => Object.keys(exp.amounts).length);
+        }
+        if (filterFromDate && filterToDate) {
+          filtered = filtered.filter(exp => exp.date >= filterFromDate && exp.date <= filterToDate);
+        }
+        setFilteredExpenses(filtered);
+      }, [expenses, filterCategory, filterFromDate, filterToDate]);
+
+      const validateCategory = (name) => {
+        return /^[a-zA-Z0-9\s]+$/.test(name);
+      };
+
+      const addCategory = async () => {
+        if (!newCategory) return showToast('Category name required.', 'error');
+        if (!validateCategory(newCategory)) return showToast('Category name must be alphanumeric.', 'error');
+        if (categories.includes(newCategory)) return showToast('Category already exists.', 'error');
+        setIsLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          await axios.post('http://localhost:3000/categories', { name: newCategory }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setCategories([...categories, newCategory]);
+          setNewCategory('');
+          showToast('Category added successfully.', 'success');
+        } catch (e) {
+          console.error('Add category error:', e);
+          showToast('Failed to add category.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const deleteCategory = async (category) => {
+        if (!window.confirm(`Delete category "${category}" and all related expenses?`)) return;
+        setIsLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          const { data } = await axios.get('http://localhost:3000/categories', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const catId = data.find(cat => cat.name === category)?.id;
+          if (!catId) throw new Error('Category not found');
+          await axios.delete(`http://localhost:3000/categories/${catId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setCategories(categories.filter(cat => cat !== category));
+          fetchExpenses();
+          fetchStats();
+          showToast('Category deleted successfully.', 'success');
+        } catch (e) {
+          console.error('Delete category error:', e);
+          showToast('Failed to delete category.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const saveExpense = async () => {
+        if (!date) return showToast('Please select a date.', 'error');
+        if (!Object.values(amounts).some(val => val && parseFloat(val) > 0)) {
+          return showToast('Enter at least one valid amount.', 'error');
+        }
+        setIsLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          if (editingExpense) {
+            const existing = expenses.find(exp => exp.date === editingExpense);
+            for (const cat of Object.keys(existing?.amounts || {})) {
+              await axios.delete(`http://localhost:3000/expenses/${editingExpense}/${cat}`, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+            }
+          }
+          await axios.post('http://localhost:3000/expenses', { date, amounts }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setAmounts({});
+          setEditingExpense(null);
+          setDate(new Date().toISOString().split('T')[0]);
+          fetchExpenses();
+          fetchStats();
+          showToast(editingExpense ? 'Expense updated successfully.' : 'Expense saved successfully.', 'success');
+        } catch (e) {
+          console.error('Save expense error:', e);
+          showToast('Failed to save expense.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const editExpense = (exp) => {
+        setEditingExpense(exp.date);
+        setDate(exp.date);
+        setAmounts({ ...exp.amounts });
+        enterExpensesRef.current.scrollIntoView({ behavior: 'smooth' });
+      };
+
+      const deleteExpense = async (date, category) => {
+        if (!window.confirm(`Delete ${category} expense for ${date}?`)) return;
+        setIsLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          await axios.delete(`http://localhost:3000/expenses/${date}/${category}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          fetchExpenses();
+          fetchStats();
+          showToast('Expense deleted successfully.', 'success');
+        } catch (e) {
+          console.error('Delete expense error:', e);
+          showToast('Failed to delete expense.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const importCSV = (event) => {
+        const file = event.target.files[0];
+        if (!file) return showToast('No file selected.', 'error');
+        if (!file.name.endsWith('.csv')) return showToast('Please upload a CSV file.', 'error');
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+          try {
+            const text = e.target.result;
+            const rows = text.split('\n').map(row => row.split(',').map(cell => cell.trim())).filter(row => row.length > 1);
+            if (rows.length < 2) return showToast('Invalid CSV format. Must have headers and at least one data row.', 'error');
+            const headers = rows[0];
+            if (!headers.includes('Date')) return showToast('CSV must include a "Date" column.', 'error');
+            const dateIndex = headers.indexOf('Date');
+            const validDateFormat = /^\d{4}-\d{2}-\d{2}$/;
+            const data = rows.slice(1).filter(row => {
+              const date = row[dateIndex];
+              return date && validDateFormat.test(date);
+            }).map(row => {
+              const entry = { date: row[dateIndex], amounts: {} };
+              headers.forEach((header, i) => {
+                if (i !== dateIndex && row[i] && parseFloat(row[i]) > 0) {
+                  entry.amounts[header] = parseFloat(row[i]).toFixed(2);
+                }
+              });
+              return entry;
+            }).filter(entry => Object.keys(entry.amounts).length > 0);
+            if (!data.length) return showToast('No valid data to import. Ensure dates are in YYYY-MM-DD format and amounts are positive numbers.', 'error');
+            setIsLoading(true);
+            console.log('Sending CSV data to server:', data);
+            const token = localStorage.getItem('token');
+            const response = await axios.post('http://localhost:3000/expenses/import', { data }, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (response.data.errors && response.data.errors.length) {
+              console.warn('Import errors:', response.data.errors);
+              showToast(`Import completed with errors: ${response.data.errors.join('; ')}`, 'error');
+            } else {
+              showToast('CSV imported successfully.', 'success');
+            }
+            await Promise.all([fetchCategories(), fetchExpenses(), fetchStats()]);
+          } catch (e) {
+            console.error('Import CSV error:', e.response?.data || e.message, e.stack);
+            showToast(`Failed to import CSV: ${e.response?.data?.error || e.message}`, 'error');
+          } finally {
+            setIsLoading(false);
+            event.target.value = '';
+          }
+        };
+        reader.onerror = () => {
+          console.error('FileReader error');
+          showToast('Failed to read CSV file.', 'error');
+          setIsLoading(false);
+        };
+        reader.readAsText(file);
+      };
+
+      const exportToPDF = () => {
+        try {
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF();
+          let yOffset = 20;
+
+          doc.setFontSize(16);
+          doc.text('Visionary Infra Expense Tracker - Statistics', 20, yOffset);
+          yOffset += 10;
+          doc.setFontSize(12);
+          if (fromDate && toDate) {
+            doc.text(`Date Range: ${fromDate} to ${toDate}`, 20, yOffset);
+            yOffset += 10;
+          }
+
+          doc.setFontSize(14);
+          doc.text('Total Spending', 20, yOffset);
+          yOffset += 8;
+          doc.setFontSize(12);
+          doc.text(`₹${stats.total.toFixed(2)}`, 20, yOffset);
+          yOffset += 15;
+
+          doc.setFontSize(14);
+          doc.text('Top Categories', 20, yOffset);
+          yOffset += 8;
+          doc.setFontSize(12);
+          topCategories.forEach(cat => {
+            doc.text(`${cat.category}: ₹${cat.total.toFixed(2)}`, 20, yOffset);
+            yOffset += 8;
+          });
+          yOffset += 5;
+
+          doc.setFontSize(14);
+          doc.text('High Spending Days', 20, yOffset);
+          yOffset += 8;
+          doc.setFontSize(12);
+          highDays.forEach(day => {
+            doc.text(`${day.date}: ₹${day.total.toFixed(2)}`, 20, yOffset);
+            yOffset += 8;
+          });
+          yOffset += 5;
+
+          doc.setFontSize(14);
+          doc.text('Yearly Trends', 20, yOffset);
+          yOffset += 8;
+          doc.setFontSize(12);
+          yearlyTrends.forEach(year => {
+            doc.text(`${year.year}: ₹${year.total.toFixed(2)}`, 20, yOffset);
+            yOffset += 8;
+          });
+          yOffset += 5;
+
+          doc.setFontSize(14);
+          doc.text('Category Breakdown', 20, yOffset);
+          yOffset += 8;
+          doc.setFontSize(12);
+          Object.entries(stats.byCategory).forEach(([cat, val]) => {
+            doc.text(`${cat}: ₹${val.toFixed(2)} (${stats.percentages[cat]}%)`, 20, yOffset);
+            yOffset += 8;
+          });
+
+          doc.save('expense_statistics.pdf');
+          showToast('Statistics exported to PDF successfully.', 'success');
+        } catch (e) {
+          console.error('Export PDF error:', e);
+          showToast('Failed to export PDF.', 'error');
+        }
+      };
+
+      const toggleSection = (section) => {
+        setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }));
+      };
+
+      const toggleAllExpenses = (collapse) => {
+        setCollapsedExpenses(filteredExpenses.reduce((acc, exp) => ({
+          ...acc,
+          [exp.date]: collapse
+        }), {}));
+      };
+
+      const toggleExpense = (date) => {
+        setCollapsedExpenses(prev => ({ ...prev, [date]: !prev[date] }));
+      };
+
+      const exportToCSV = () => {
+        try {
+          const headers = ['Date', ...categories, 'Total'];
+          const rows = filteredExpenses.map(exp => {
+            const total = Object.values(exp.amounts || {}).reduce((sum, val) => sum + (parseFloat(val) || 0), 0).toFixed(2);
+            return [
+              exp.date,
+              ...categories.map(cat => exp.amounts[cat] ? parseFloat(exp.amounts[cat]).toFixed(2) : ''),
+              total
+            ];
+          });
+          const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'expenses.csv';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          showToast('Exported to CSV successfully.', 'success');
+        } catch (e) {
+          console.error('Export CSV error:', e);
+          showToast('Failed to export CSV.', 'error');
+        }
+      };
+
+      const toggleDarkMode = () => {
+        setIsDarkMode(prev => !prev);
+      };
+
+      const logout = () => {
+        localStorage.removeItem('token');
+        window.location.href = '/index.html';
+      };
+
+      const openProfileModal = () => {
+        fetchProfile();
+        setShowProfileModal(true);
+        setShowDropdown(false);
+      };
+
+      const closeProfileModal = () => {
+        setShowProfileModal(false);
+        setCurrentPassword('');
+        setNewPassword('');
+      };
+
+      const saveProfile = async () => {
+        setIsLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          await axios.post('http://localhost:3000/profile', {
+            name: newName,
+            gender: profile.gender,
+            dob: profile.dob
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setProfile({ ...profile, name: newName });
+          showToast('Profile updated successfully.', 'success');
+        } catch (e) {
+          console.error('Save profile error:', e);
+          showToast('Failed to update profile.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const updatePassword = async () => {
+        if (!currentPassword || !newPassword) {
+          return showToast('Both current and new password are required.', 'error');
+        }
+        setIsLoading(true);
+        try {
+          const token = localStorage.getItem('token');
+          await axios.post('http://localhost:3000/update-password', {
+            currentPassword,
+            newPassword
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          showToast('Password updated successfully.', 'success');
+          setCurrentPassword('');
+          setNewPassword('');
+        } catch (e) {
+          console.error('Update password error:', e);
+          showToast(e.response?.data?.error || 'Failed to update password.', 'error');
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      const getTotalForDate = (amounts) => {
+        return Object.values(amounts || {}).reduce((sum, val) => sum + (parseFloat(val) || 0), 0).toFixed(2);
+      };
+
+      return (
+        <div className={`max-w-6xl mx-auto p-4 sm:p-8 bg-white rounded-2xl shadow-xl mt-8 mb-8 ${isDarkMode ? 'dark' : ''}`}>
+          {isLoading && (
+            <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
+              <div className="spinner"></div>
+            </div>
+          )}
+          {toast.message && (
+            <div className={`toast ${toast.type === 'success' ? 'toast-success' : 'toast-error'}`}>
+              {toast.message}
+            </div>
+          )}
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800">Visionary Infra Expense Tracker</h1>
+              <h2 className="text-lg text-gray-700">Track your expenses with ease</h2>
+            </div>
+            <div className="flex items-center gap-4">
+              <button onClick={toggleDarkMode} className="p-2 rounded-full hover:bg-gray-200" title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+                <i data-feather={isDarkMode ? 'sun' : 'moon'} className="w-6 h-6"></i>
+              </button>
+              <div className="user-icon-container" ref={dropdownRef}>
+                <div className="user-icon" onClick={() => setShowDropdown(!showDropdown)}>
+                  <i data-feather="user" className="w-6 h-6 text-gray-700 dark:text-gray-300"></i>
+                </div>
+                {showDropdown && (
+                  <div className="dropdown-menu">
+                    <div className="dropdown-item" onClick={openProfileModal}>
+                      <i data-feather="user" className="w-5 h-5"></i>
+                      My Profile
+                    </div>
+                    <div className="dropdown-item" onClick={logout}>
+                      <i data-feather="log-out" className="w-5 h-5 text-red-500"></i>
+                      Log Out
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {showProfileModal && (
+            <div className="modal">
+              <div className="modal-content">
+                <button className="close-button" onClick={closeProfileModal}>
+                  <i data-feather="x" className="w-6 h-6 text-gray-700 dark:text-gray-300"></i>
+                </button>
+                <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-6">My Profile</h3>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Name</label>
+                  <input
+                    type="text"
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                    className="border rounded-lg p-3 w-full text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    disabled
+                    className="border rounded-lg p-3 w-full text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-600 cursor-not-allowed"
+                  />
+                </div>
+                <button onClick={saveProfile} className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 w-full mb-6">
+                  Save Profile
+                </button>
+                <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-2">Update Password</h4>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Current Password</label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={e => setCurrentPassword(e.target.value)}
+                    className="border rounded-lg p-3 w-full text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Password</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    className="border rounded-lg p-3 w-full text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <button onClick={updatePassword} className="bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 w-full">
+                  Update Password
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="mb-8" ref={enterExpensesRef}>
+            <div className="flex justify-between items-center bg-gray-100 p-4 rounded-lg collapsible-header" onClick={() => toggleSection('enterExpenses')}>
+              <h3 className="text-xl font-bold text-gray-800">Enter Expenses</h3>
+              <i data-feather={collapsedSections.enterExpenses ? 'chevron-down' : 'chevron-up'} className="w-6 h-6"></i>
+            </div>
+            {!collapsedSections.enterExpenses && (
+              <div className="p-6 bg-gray-50 rounded-b-lg">
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={e => setDate(e.target.value)}
+                    className="border rounded-lg p-3 w-full text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+                  {categories.map(cat => (
+                    <div key={cat} className="flex flex-col">
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-medium text-gray-700">{cat}</label>
+                        <button onClick={() => deleteCategory(cat)} className="text-red-500 hover:text-red-700" title="Delete Category">
+                          <i data-feather="trash-2" className="w-5 h-5"></i>
+                        </button>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="10"
+                        value={amounts[cat] || ''}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val < 0) return;
+                          setAmounts({ ...amounts, [cat]: val });
+                        }}
+                        onWheel={e => e.target.blur()}
+                        className="border rounded-lg p-3 w-full text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                  <input
+                    type="text"
+                    placeholder="New category (e.g., Utilities)"
+                    value={newCategory}
+                    onChange={e => setNewCategory(e.target.value)}
+                    className="border rounded-lg p-3 flex-grow text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button onClick={addCategory} className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 flex items-center" title="Add New Category">
+                    <i data-feather="plus" className="w-5 h-5 mr-2"></i>Add Category
+                  </button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <button onClick={saveExpense} className="flex-1 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 flex items-center justify-center" title={editingExpense ? 'Update Expense' : 'Save Expense'}>
+                    <i data-feather="check" className="w-5 h-5 mr-2"></i>{editingExpense ? 'Update' : 'Save'}
+                  </button>
+                  <button onClick={() => { fetchCategories(); fetchExpenses(); fetchStats(); }} className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 flex items-center" title="Refresh Data">
+                    <i data-feather="refresh-cw" className="w-5 h-5 mr-2"></i>Refresh
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="mb-8">
+            <div className="flex justify-between items-center bg-gray-100 p-4 rounded-lg collapsible-header" onClick={() => toggleSection('statistics')}>
+              <h3 className="text-xl font-bold text-gray-800">Statistics</h3>
+              <i data-feather={collapsedSections.statistics ? 'chevron-down' : 'chevron-up'} className="w-6 h-6"></i>
+            </div>
+            {!collapsedSections.statistics && (
+              <div className="p-6 bg-gray-50 rounded-b-lg">
+                <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={e => setFromDate(e.target.value)}
+                    className="border rounded-lg p-3 flex-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="From Date"
+                  />
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={e => setToDate(e.target.value)}
+                    className="border rounded-lg p-3 flex-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="To Date"
+                  />
+                  <button onClick={exportToPDF} className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 flex items-center" title="Export Statistics to PDF">
+                    <i data-feather="file-text" className="w-5 h-5 mr-2"></i>Export PDF
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+                  <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <i data-feather="dollar-sign" className="w-5 h-5 text-blue-500 mr-2"></i>
+                      <h4 className="text-sm font-bold text-gray-800">Total Spending</h4>
+                    </div>
+                    <p className="text-lg text-gray-700">₹{stats.total.toFixed(2)}</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <i data-feather="trending-up" className="w-5 h-5 text-green-500 mr-2"></i>
+                      <h4 className="text-sm font-bold text-gray-800">Top Categories</h4>
+                    </div>
+                    <ul className="text-sm text-gray-700">
+                      {topCategories.map(cat => (
+                        <li key={cat.category}>{cat.category}: ₹{cat.total.toFixed(2)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <i data-feather="calendar" className="w-5 h-5 text-red-500 mr-2"></i>
+                      <h4 className="text-sm font-bold text-gray-800">High Spending Days</h4>
+                    </div>
+                    <ul className="text-sm text-gray-700">
+                      {highDays.map(day => (
+                        <li key={day.date}>{day.date}: ₹{day.total.toFixed(2)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg shadow-sm">
+                    <div className="flex items-center mb-2">
+                      <i data-feather="bar-chart-2" className="w-5 h-5 text-purple-500 mr-2"></i>
+                      <h4 className="text-sm font-bold text-gray-800">Yearly Trends</h4>
+                    </div>
+                    <ul className="text-sm text-gray-700">
+                      {yearlyTrends.map(year => (
+                        <li key={year.year}>{year.year}: ₹{year.total.toFixed(2)}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                <h4 className="text-sm font-bold text-gray-800 mb-2">Category Breakdown</h4>
+                <ul className="text-sm text-gray-700 mb-6">
+                  {Object.entries(stats.byCategory).map(([cat, val]) => (
+                    <li key={cat} className="flex justify-between">
+                      <span>{cat}</span>
+                      <span>₹{val.toFixed(2)} ({stats.percentages[cat]}%)</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center bg-gray-100 p-4 rounded-lg collapsible-header" onClick={() => toggleSection('pastExpenses')}>
+              <h3 className="text-xl font-bold text-gray-800">Past Expenses</h3>
+              <i data-feather={collapsedSections.pastExpenses ? 'chevron-down' : 'chevron-up'} className="w-6 h-6"></i>
+            </div>
+            {!collapsedSections.pastExpenses && (
+              <div className="p-6 bg-gray-50 rounded-b-lg">
+                <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                  <select
+                    value={filterCategory}
+                    onChange={e => setFilterCategory(e.target.value)}
+                    className="border rounded-lg p-3 flex-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Categories</option>
+                    {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                  <input
+                    type="date"
+                    value={filterFromDate}
+                    onChange={e => setFilterFromDate(e.target.value)}
+                    className="border rounded-lg p-3 flex-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="date"
+                    value={filterToDate}
+                    onChange={e => setFilterToDate(e.target.value)}
+                    className="border rounded-lg p-3 flex-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                  <label className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 flex items-center" title="Import from CSV">
+                    <i data-feather="upload" className="w-5 h-5 mr-2"></i>Import CSV
+                    <input type="file" accept=".csv" onChange={importCSV} className="hidden" />
+                  </label>
+                  <button onClick={exportToCSV} className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 flex items-center" title="Export to CSV">
+                    <i data-feather="download" className="w-5 h-5 mr-2"></i>Export CSV
+                  </button>
+                  <button onClick={() => setIsTableView(!isTableView)} className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 flex items-center" title={isTableView ? 'Switch to List View' : 'Switch to Table View'}>
+                    <i data-feather={isTableView ? 'list' : 'grid'} className="w-5 h-5 mr-2"></i>{isTableView ? 'List View' : 'Table View'}
+                  </button>
+                  <button onClick={() => toggleAllExpenses(true)} className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 flex items-center" title="Collapse All Expenses">
+                    <i data-feather="chevron-up" className="w-5 h-5 mr-2"></i>Collapse All
+                  </button>
+                  <button onClick={() => toggleAllExpenses(false)} className="bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600 flex items-center" title="Expand All Expenses">
+                    <i data-feather="chevron-down" className="w-5 h-5 mr-2"></i>Expand All
+                  </button>
+                </div>
+                {isTableView ? (
+                  <table className="w-full text-sm text-gray-700">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="p-3 text-left">Date</th>
+                        <th className="p-3 text-right">Total</th>
+                        <th className="p-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredExpenses.map(exp => (
+                        <React.Fragment key={exp.date}>
+                          <tr className="border-b cursor-pointer hover:bg-gray-50" onClick={() => toggleExpense(exp.date)}>
+                            <td className="p-3">{exp.date}</td>
+                            <td className="p-3 text-right">₹{getTotalForDate(exp.amounts)}</td>
+                            <td className="p-3 text-right">
+                              <button onClick={(e) => { e.stopPropagation(); editExpense(exp); }} className="text-blue-500 hover:text-blue-600 mr-2" title="Edit Expense">
+                                <i data-feather="edit" className="w-5 h-5"></i>
+                              </button>
+                            </td>
+                          </tr>
+                          {!collapsedExpenses[exp.date] && (
+                            <tr>
+                              <td colSpan="3" className="p-3 bg-gray-50">
+                                {Object.entries(exp.amounts).map(([cat, amount]) => (
+                                  <div key={cat} className="flex justify-between text-sm mb-2">
+                                    <span>{cat}: ₹{parseFloat(amount).toFixed(2)}</span>
+                                    <button onClick={() => deleteExpense(exp.date, cat)} className="text-red-500 hover:text-red-600" title="Delete Expense">
+                                      <i data-feather="trash-2" className="w-5 h-5"></i>
+                                    </button>
+                                  </div>
+                                ))}
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div>
+                    {filteredExpenses.map(exp => {
+                      console.log('Rendering expense:', exp);
+                      return (
+                        <div key={exp.date} className="border rounded-lg mb-4 bg-gray-50">
+                          <div className="flex justify-between items-center p-4 cursor-pointer bg-gray-200 hover:bg-gray-300 collapsible-header" onClick={() => toggleExpense(exp.date)}>
+                            <span className="text-sm text-gray-700 font-bold">Date: {exp.date} (Total: ₹{getTotalForDate(exp.amounts)})</span>
+                            <div className="flex items-center gap-3">
+                              <button onClick={(e) => { e.stopPropagation(); editExpense(exp); }} className="text-blue-500 hover:text-blue-600" title="Edit Expense">
+                                <i data-feather="edit" className="w-5 h-5"></i>
+                              </button>
+                              <i data-feather={collapsedExpenses[exp.date] ? 'chevron-down' : 'chevron-up'} className="w-5 h-5"></i>
+                            </div>
+                          </div>
+                          {!collapsedExpenses[exp.date] && (
+                            <div className="p-4">
+                              {Object.entries(exp.amounts).map(([cat, amount]) => (
+                                <div key={cat} className="flex justify-between text-sm mb-2">
+                                  <span>{cat}: ₹{parseFloat(amount).toFixed(2)}</span>
+                                  <button onClick={() => deleteExpense(exp.date, cat)} className="text-red-500 hover:text-red-600" title="Delete">
+                                    <i data-feather="trash-2" className="w-5 h-5"></i>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(
+      <ErrorBoundary>
+        <ProtectedRoute>
+          <App />
+        </ProtectedRoute>
+      </ErrorBoundary>,
+      document.getElementById('root')
+    );
+  </script>
+</body>
+</html>
