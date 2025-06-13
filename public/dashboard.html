@@ -98,7 +98,7 @@
           return;
         }
         console.log('Making API call to /categories with token:', token);
-        axios.get('http://localhost:3000/categories', {
+        axios.get('/categories', {
           headers: { Authorization: `Bearer ${token}` }
         }).then(res => {
           console.log('Categories API call successful:', res.data);
@@ -220,7 +220,7 @@
         setIsLoading(true);
         try {
           const token = localStorage.getItem('token');
-          const { data } = await axios.get('http://localhost:3000/profile', {
+          const { data } = await axios.get('/profile', {
             headers: { Authorization: `Bearer ${token}` }
           });
           setProfile(data);
@@ -237,7 +237,7 @@
         setIsLoading(true);
         try {
           const token = localStorage.getItem('token');
-          const { data } = await axios.get('http://localhost:3000/categories', {
+          const { data } = await axios.get('/categories', {
             headers: { Authorization: `Bearer ${token}` }
           });
           const fetched = (data || []).map(cat => cat.name).filter(Boolean);
@@ -258,7 +258,7 @@
         setIsLoading(true);
         try {
           const token = localStorage.getItem('token');
-          const { data } = await axios.get('http://localhost:3000/expenses', {
+          const { data } = await axios.get('/expenses', {
             headers: { Authorization: `Bearer ${token}` }
           });
           const exps = data || [];
@@ -283,10 +283,10 @@
           const token = localStorage.getItem('token');
           const params = fromDate && toDate ? { fromDate, toDate } : {};
           const [statsRes, topRes, highRes, yearlyRes] = await Promise.all([
-            axios.get('http://localhost:3000/stats', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { total: 0, byCategory: {}, percentages: {} } })),
-            axios.get('http://localhost:3000/stats/top', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })),
-            axios.get('http://localhost:3000/stats/high-days', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })),
-            axios.get('http://localhost:3000/yearly', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] }))
+            axios.get('/stats', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: { total: 0, byCategory: {}, percentages: {} } })),
+            axios.get('/stats/top', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })),
+            axios.get('/stats/high-days', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] })),
+            axios.get('/yearly', { params, headers: { Authorization: `Bearer ${token}` } }).catch(() => ({ data: [] }))
           ]);
           setStats(statsRes.data);
           setTopCategories(topRes.data);
@@ -333,7 +333,7 @@
         setIsLoading(true);
         try {
           const token = localStorage.getItem('token');
-          await axios.post('http://localhost:3000/categories', { name: newCategory }, {
+          await axios.post('/categories', { name: newCategory }, {
             headers: { Authorization: `Bearer ${token}` }
           });
           setCategories([...categories, newCategory]);
@@ -352,12 +352,12 @@
         setIsLoading(true);
         try {
           const token = localStorage.getItem('token');
-          const { data } = await axios.get('http://localhost:3000/categories', {
+          const { data } = await axios.get('/categories', {
             headers: { Authorization: `Bearer ${token}` }
           });
           const catId = data.find(cat => cat.name === category)?.id;
           if (!catId) throw new Error('Category not found');
-          await axios.delete(`http://localhost:3000/categories/${catId}`, {
+          await axios.delete(`/categories/${catId}`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           setCategories(categories.filter(cat => cat !== category));
@@ -383,12 +383,12 @@
           if (editingExpense) {
             const existing = expenses.find(exp => exp.date === editingExpense);
             for (const cat of Object.keys(existing?.amounts || {})) {
-              await axios.delete(`http://localhost:3000/expenses/${editingExpense}/${cat}`, {
+              await axios.delete(`/expenses/${editingExpense}/${cat}`, {
                 headers: { Authorization: `Bearer ${token}` }
               });
             }
           }
-          await axios.post('http://localhost:3000/expenses', { date, amounts }, {
+          await axios.post('/expenses', { date, amounts }, {
             headers: { Authorization: `Bearer ${token}` }
           });
           setAmounts({});
@@ -417,7 +417,7 @@
         setIsLoading(true);
         try {
           const token = localStorage.getItem('token');
-          await axios.delete(`http://localhost:3000/expenses/${date}/${category}`, {
+          await axios.delete(`/expenses/${date}/${category}`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           fetchExpenses();
@@ -461,7 +461,7 @@
             setIsLoading(true);
             console.log('Sending CSV data to server:', data);
             const token = localStorage.getItem('token');
-            const response = await axios.post('http://localhost:3000/expenses/import', { data }, {
+            const response = await axios.post('/expenses/import', { data }, {
               headers: { Authorization: `Bearer ${token}` }
             });
             if (response.data.errors && response.data.errors.length) {
@@ -623,7 +623,7 @@
         setIsLoading(true);
         try {
           const token = localStorage.getItem('token');
-          await axios.post('http://localhost:3000/profile', {
+          await axios.post('/profile', {
             name: newName,
             gender: profile.gender,
             dob: profile.dob
@@ -647,7 +647,7 @@
         setIsLoading(true);
         try {
           const token = localStorage.getItem('token');
-          await axios.post('http://localhost:3000/update-password', {
+          await axios.post('/update-password', {
             currentPassword,
             newPassword
           }, {
